@@ -1,0 +1,32 @@
+{
+  "name": "@lead-intake/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Fastify API for the lead intake service",
+  "main": "dist/server.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p test/tsconfig.json",
+    "test": "c8 node --test test/app.test.ts",
+    "start": "node dist/server.js",
+    "dev": "pnpm build && node --watch dist/server.js"
+  },
+  "license": "UNLICENSED",
+  "dependencies": {
+    "@fastify/swagger": "^9.8.1",
+    "@fastify/swagger-ui": "^6.1.1",
+    "@fastify/type-provider-typebox": "^6.1.0",
+    "@sinclair/typebox": "^0.34.52",
+    "drizzle-orm": "^0.45.3",
+    "fastify": "^5.0.0",
+    "pg": "^8.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.8",
+    "@types/pg": "^8.23.1",
+    "c8": "^10.1.2",
+    "drizzle-kit": "^0.31.11",
+    "typescript": "~5.9.2"
+  }
+}

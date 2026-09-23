@@ -1,0 +1,8 @@
+@import '@fontsource-variable/manrope';
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: 'Manrope Variable', sans-serif;
+  --color-primary: rgb(32 132 125);
+  --color-card: #a4bae233;
+}
