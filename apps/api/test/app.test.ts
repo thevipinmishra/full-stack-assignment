@@ -21,7 +21,7 @@ test('returns API information', async () => {
   }
 })
 
-test('returns 404 for an unknown route', async () => {
+test('does not expose an API documentation route', async () => {
   const app = buildApp()
 
   try {
@@ -29,7 +29,7 @@ test('returns 404 for an unknown route', async () => {
 
     const response = await app.inject({
       method: 'GET',
-      url: '/missing',
+      url: '/docs',
     })
 
     assert.equal(response.statusCode, 404)

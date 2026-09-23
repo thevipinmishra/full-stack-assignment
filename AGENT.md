@@ -1,0 +1,4 @@
+- Never write redundant code comments, do it only when the code isn't self-explanatory and the comment adds value.
+- Verify your work by linting your code, assume the dev server is running and use it to test your changes.
+- Never assume anything on your own, always ask for clarification first when making unclarified assumptions.
+- DO NOT change this file on your own for any new changes, this must be edited by the user.

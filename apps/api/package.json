@@ -17,8 +17,6 @@
   },
   "license": "UNLICENSED",
   "dependencies": {
-    "@fastify/swagger": "^9.8.1",
-    "@fastify/swagger-ui": "^6.1.1",
     "@fastify/type-provider-typebox": "^6.1.0",
     "@sinclair/typebox": "^0.34.52",
     "drizzle-orm": "^0.45.3",
