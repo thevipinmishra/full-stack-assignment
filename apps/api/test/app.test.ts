@@ -3,7 +3,7 @@ import { test } from 'node:test'
 
 import { buildApp } from '../src/app.ts'
 
-test('returns the API starting-point message', async () => {
+test('returns API information', async () => {
   const app = buildApp()
 
   try {
@@ -14,8 +14,7 @@ test('returns the API starting-point message', async () => {
 
     assert.equal(response.statusCode, 200)
     assert.deepEqual(response.json(), {
-      message:
-        'API is running. This is a starting point; webhook and related APIs are still to be built.',
+      name: 'Lead intake API',
     })
   } finally {
     await app.close()
