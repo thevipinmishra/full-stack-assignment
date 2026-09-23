@@ -1,6 +1,10 @@
 import { Type } from '@sinclair/typebox'
 
-import { leadStatusValues } from '../db/schema.js'
+import {
+  activitySourceValues,
+  activityTypeValues,
+  leadStatusValues,
+} from '../db/schema.js'
 
 const NullableString = Type.Union([Type.String(), Type.Null()])
 
@@ -31,6 +35,23 @@ export const LeadSchema = Type.Object({
   ]),
   createdAt: Type.String({ format: 'date-time' }),
   updatedAt: Type.String({ format: 'date-time' }),
+})
+
+export const ActivitySchema = Type.Object({
+  id: Type.String({ format: 'uuid' }),
+  leadId: Type.String({ format: 'uuid' }),
+  type: Type.Union([
+    Type.Literal(activityTypeValues[0]),
+    Type.Literal(activityTypeValues[1]),
+    Type.Literal(activityTypeValues[2]),
+  ]),
+  source: Type.Union([
+    Type.Literal(activitySourceValues[0]),
+    Type.Literal(activitySourceValues[1]),
+  ]),
+  description: Type.String(),
+  changes: Type.Record(Type.String(), Type.Unknown()),
+  createdAt: Type.String({ format: 'date-time' }),
 })
 
 export const ErrorSchema = Type.Object({

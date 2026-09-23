@@ -1,12 +1,15 @@
-import { eq } from 'drizzle-orm'
+import { and, count, desc, eq, ilike, or, type SQL } from 'drizzle-orm'
 
 import type { Database } from '../db/client.js'
 import {
   leadActivities,
   leads,
   type ActivityChanges,
+  type ActivityRecord,
   type LeadRecord,
+  type LeadStatus,
 } from '../db/schema.js'
+import { NotFoundError } from '../errors.js'
 import type { IncomingMetaLead } from './meta-payload.js'
 
 const mutableLeadFields = [
@@ -33,9 +36,20 @@ export interface SerializedLead extends Omit<
   updatedAt: string
 }
 
+export interface SerializedActivity extends Omit<ActivityRecord, 'createdAt'> {
+  createdAt: string
+}
+
 export interface IngestedLead {
   action: 'created' | 'updated' | 'unchanged'
   lead: SerializedLead
+}
+
+export interface ListLeadOptions {
+  limit: number
+  page: number
+  search?: string
+  status?: LeadStatus
 }
 
 function serializeLead(lead: LeadRecord): SerializedLead {
@@ -46,6 +60,13 @@ function serializeLead(lead: LeadRecord): SerializedLead {
     createdAt: lead.createdAt.toISOString(),
     sourceCreatedAt: lead.sourceCreatedAt?.toISOString() ?? null,
     updatedAt: lead.updatedAt.toISOString(),
+  }
+}
+
+function serializeActivity(activity: ActivityRecord): SerializedActivity {
+  return {
+    ...activity,
+    createdAt: activity.createdAt.toISOString(),
   }
 }
 
@@ -164,6 +185,113 @@ export class LeadService {
       }
 
       return results
+    })
+  }
+
+  async listLeads(options: ListLeadOptions): Promise<{
+    data: SerializedLead[]
+    pagination: {
+      limit: number
+      page: number
+      total: number
+      totalPages: number
+    }
+  }> {
+    const filters: SQL[] = []
+
+    if (options.status) filters.push(eq(leads.status, options.status))
+    if (options.search) {
+      const search = `%${options.search}%`
+      const searchFilter = or(
+        ilike(leads.fullName, search),
+        ilike(leads.email, search),
+        ilike(leads.phone, search),
+        ilike(leads.metaLeadId, search),
+      )
+      if (searchFilter) filters.push(searchFilter)
+    }
+
+    const where = filters.length > 0 ? and(...filters) : undefined
+    const offset = (options.page - 1) * options.limit
+    const [rows, totalRows] = await Promise.all([
+      this.db
+        .select()
+        .from(leads)
+        .where(where)
+        .orderBy(desc(leads.createdAt))
+        .limit(options.limit)
+        .offset(offset),
+      this.db.select({ value: count() }).from(leads).where(where),
+    ])
+    const total = totalRows[0]?.value ?? 0
+
+    return {
+      data: rows.map(serializeLead),
+      pagination: {
+        limit: options.limit,
+        page: options.page,
+        total,
+        totalPages: total === 0 ? 0 : Math.ceil(total / options.limit),
+      },
+    }
+  }
+
+  async getLead(id: string): Promise<{
+    activities: SerializedActivity[]
+    lead: SerializedLead
+  }> {
+    const [lead] = await this.db
+      .select()
+      .from(leads)
+      .where(eq(leads.id, id))
+      .limit(1)
+
+    if (!lead) throw new NotFoundError('Lead not found')
+
+    const activities = await this.db
+      .select()
+      .from(leadActivities)
+      .where(eq(leadActivities.leadId, id))
+      .orderBy(desc(leadActivities.createdAt))
+
+    return {
+      activities: activities.map(serializeActivity),
+      lead: serializeLead(lead),
+    }
+  }
+
+  async updateStatus(
+    id: string,
+    status: LeadStatus,
+  ): Promise<{ changed: boolean; lead: SerializedLead }> {
+    return this.db.transaction(async (transaction) => {
+      const [current] = await transaction
+        .select()
+        .from(leads)
+        .where(eq(leads.id, id))
+        .limit(1)
+        .for('update')
+
+      if (!current) throw new NotFoundError('Lead not found')
+      if (current.status === status) {
+        return { changed: false, lead: serializeLead(current) }
+      }
+
+      const [updated] = await transaction
+        .update(leads)
+        .set({ status, updatedAt: new Date() })
+        .where(eq(leads.id, id))
+        .returning()
+
+      await transaction.insert(leadActivities).values({
+        changes: { status: { from: current.status, to: status } },
+        description: `Status changed from ${current.status} to ${status}`,
+        leadId: id,
+        source: 'api',
+        type: 'status_changed',
+      })
+
+      return { changed: true, lead: serializeLead(updated) }
     })
   }
 }

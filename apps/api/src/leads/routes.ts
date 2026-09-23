@@ -9,11 +9,17 @@ import type { Database } from '../db/client.js'
 import { UnauthorizedError } from '../errors.js'
 import { extractMetaLeads } from './meta-payload.js'
 import {
+  ActivitySchema,
   ErrorSchema,
   LeadSchema,
+  LeadStatusSchema,
   MetaWebhookBodySchema,
 } from './schemas.js'
 import { LeadService } from './service.js'
+
+const IdParamsSchema = Type.Object({
+  id: Type.String({ format: 'uuid' }),
+})
 
 function verifyMetaSignature(
   request: FastifyRequest,
@@ -125,5 +131,82 @@ export function registerLeadRoutes(
 
       return { data, received: data.length }
     },
+  )
+
+  server.get(
+    '/leads',
+    {
+      schema: {
+        querystring: Type.Object({
+          limit: Type.Optional(
+            Type.Integer({ default: 20, maximum: 100, minimum: 1 }),
+          ),
+          page: Type.Optional(Type.Integer({ default: 1, minimum: 1 })),
+          search: Type.Optional(Type.String({ minLength: 1 })),
+          status: Type.Optional(LeadStatusSchema),
+        }),
+        response: {
+          200: Type.Object({
+            data: Type.Array(LeadSchema),
+            pagination: Type.Object({
+              limit: Type.Integer(),
+              page: Type.Integer(),
+              total: Type.Integer(),
+              totalPages: Type.Integer(),
+            }),
+          }),
+          400: ErrorSchema,
+        },
+      },
+    },
+    async (request) => {
+      return service.listLeads({
+        limit: request.query.limit ?? 20,
+        page: request.query.page ?? 1,
+        search: request.query.search,
+        status: request.query.status,
+      })
+    },
+  )
+
+  server.get(
+    '/leads/:id',
+    {
+      schema: {
+        params: IdParamsSchema,
+        response: {
+          200: Type.Object({
+            activities: Type.Array(ActivitySchema),
+            lead: LeadSchema,
+          }),
+          400: ErrorSchema,
+          404: ErrorSchema,
+        },
+      },
+    },
+    async (request) => service.getLead(request.params.id),
+  )
+
+  server.patch(
+    '/leads/:id/status',
+    {
+      schema: {
+        body: Type.Object(
+          { status: LeadStatusSchema },
+          { additionalProperties: false },
+        ),
+        params: IdParamsSchema,
+        response: {
+          200: Type.Object({
+            changed: Type.Boolean(),
+            lead: LeadSchema,
+          }),
+          400: ErrorSchema,
+          404: ErrorSchema,
+        },
+      },
+    },
+    async (request) =>
+      service.updateStatus(request.params.id, request.body.status),
   )
 }
