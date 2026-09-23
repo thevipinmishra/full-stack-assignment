@@ -7,6 +7,9 @@
   "main": "dist/server.js",
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "pnpm build && node dist/db/migrate.js",
+    "db:studio": "drizzle-kit studio",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p test/tsconfig.json",
     "test": "c8 node --test test/app.test.ts",
     "start": "node dist/server.js",
