@@ -1,8 +1,30 @@
 @import '@fontsource-variable/manrope';
 @import 'tailwindcss';
+@plugin 'tailwindcss-animate';
 
-@theme {
-  --font-sans: 'Manrope Variable', sans-serif;
-  --color-primary: rgb(32 132 125);
-  --color-card: #a4bae233;
+@media (prefers-reduced-motion: no-preference) {
+  .feedback-toast {
+    animation: toast-enter 220ms cubic-bezier(0.2, 0, 0, 1) both;
+  }
+
+  .lead-skeleton {
+    animation: skeleton-breathe 1.5s ease-in-out infinite;
+  }
+
+  @keyframes toast-enter {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes skeleton-breathe {
+    50% {
+      opacity: 0.48;
+    }
+  }
 }
