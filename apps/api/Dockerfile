@@ -9,7 +9,7 @@ RUN pnpm install --frozen-lockfile --filter @lead-intake/api...
 
 COPY apps/api apps/api
 RUN pnpm --filter @lead-intake/api build
-RUN pnpm --filter @lead-intake/api deploy --prod /app
+RUN pnpm --filter @lead-intake/api deploy --legacy --prod /app
 
 FROM node:24-alpine AS runtime
 

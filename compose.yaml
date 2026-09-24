@@ -11,7 +11,7 @@ services:
       timeout: 5s
       retries: 10
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - lead-intake-data:/var/lib/postgresql/data
 
@@ -26,8 +26,22 @@ services:
     environment:
       DATABASE_URL: postgres://postgres:postgres@database:5432/lead_intake
       PORT: 3001
+      WEBHOOK_SIGNING_SECRET: ${WEBHOOK_SIGNING_SECRET:-local-demo-secret}
     ports:
-      - "3001:3001"
+      - "127.0.0.1:3001:3001"
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    depends_on:
+      - api
+    environment:
+      API_HOST: api
+      API_PORT: 3001
+      PORT: 8080
+    ports:
+      - "127.0.0.1:3000:8080"
 
 volumes:
   lead-intake-data:
