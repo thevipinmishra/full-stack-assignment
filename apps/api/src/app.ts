@@ -6,6 +6,7 @@ import Fastify, {
 import { type AppConfig, loadConfig } from './config.js'
 import { createDatabase, type DatabaseConnection } from './db/client.js'
 import { HttpError } from './errors.js'
+import { registerDemoRoutes } from './leads/demo-routes.js'
 import { registerLeadRoutes } from './leads/routes.js'
 
 declare module 'fastify' {
@@ -54,6 +55,7 @@ export function buildApp(
   })
 
   registerLeadRoutes(app, database.db, config)
+  registerDemoRoutes(app, config)
 
   app.setErrorHandler((error, request, reply) => {
     if (error instanceof HttpError) {

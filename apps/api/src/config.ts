@@ -1,7 +1,6 @@
 export interface AppConfig {
   databaseUrl: string
-  metaAppSecret?: string
-  metaVerifyToken?: string
+  webhookSigningSecret?: string
   port: number
 }
 
@@ -18,12 +17,16 @@ function readPort(value: string | undefined): number {
 export function loadConfig(
   environment: NodeJS.ProcessEnv = process.env,
 ): AppConfig {
+  const webhookSigningSecret = environment.WEBHOOK_SIGNING_SECRET?.trim()
+  if (environment.NODE_ENV === 'production' && !webhookSigningSecret) {
+    throw new Error('WEBHOOK_SIGNING_SECRET is required in production')
+  }
+
   return {
     databaseUrl:
       environment.DATABASE_URL ??
       'postgres://postgres:postgres@localhost:5432/lead_intake',
-    metaAppSecret: environment.META_APP_SECRET,
-    metaVerifyToken: environment.META_VERIFY_TOKEN,
+    webhookSigningSecret,
     port: readPort(environment.PORT),
   }
 }

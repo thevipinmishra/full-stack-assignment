@@ -10,8 +10,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "pnpm build && node dist/db/migrate.js",
     "db:studio": "drizzle-kit studio",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p test/tsconfig.json",
-    "test": "c8 node --test test/app.test.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
     "start": "node dist/server.js",
     "dev": "pnpm build && node --watch dist/server.js"
   },
@@ -28,6 +28,7 @@
     "@types/pg": "^8.23.1",
     "c8": "^10.1.2",
     "drizzle-kit": "^0.31.11",
-    "typescript": "~5.9.2"
+    "typescript": "~5.9.2",
+    "vitest": "^5.0.1"
   }
 }

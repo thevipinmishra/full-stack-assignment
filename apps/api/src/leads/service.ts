@@ -1,4 +1,16 @@
-import { and, count, desc, eq, ilike, or, type SQL } from 'drizzle-orm'
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  ilike,
+  inArray,
+  isNotNull,
+  or,
+  sql,
+  type SQL,
+} from 'drizzle-orm'
 
 import type { Database } from '../db/client.js'
 import {
@@ -46,10 +58,13 @@ export interface IngestedLead {
 }
 
 export interface ListLeadOptions {
+  campaign?: string[]
   limit: number
   page: number
   search?: string
-  status?: LeadStatus
+  sortBy: 'createdAt' | 'fullName' | 'campaignName' | 'status'
+  sortDirection: 'asc' | 'desc'
+  status?: LeadStatus[]
 }
 
 function serializeLead(lead: LeadRecord): SerializedLead {
@@ -136,7 +151,7 @@ export class LeadService {
         if (created) {
           await transaction.insert(leadActivities).values({
             changes: {},
-            description: 'Lead received from Meta',
+            description: 'Lead received from webhook',
             leadId: created.id,
             source: 'meta_webhook',
             type: 'lead_created',
@@ -176,7 +191,7 @@ export class LeadService {
 
         await transaction.insert(leadActivities).values({
           changes,
-          description: 'Lead details updated from Meta',
+          description: 'Lead details updated from webhook',
           leadId: current.id,
           source: 'meta_webhook',
           type: 'lead_updated',
@@ -199,7 +214,12 @@ export class LeadService {
   }> {
     const filters: SQL[] = []
 
-    if (options.status) filters.push(eq(leads.status, options.status))
+    if (options.status?.length) {
+      filters.push(inArray(leads.status, options.status))
+    }
+    if (options.campaign?.length) {
+      filters.push(inArray(leads.campaignName, options.campaign))
+    }
     if (options.search) {
       const search = `%${options.search}%`
       const searchFilter = or(
@@ -207,18 +227,28 @@ export class LeadService {
         ilike(leads.email, search),
         ilike(leads.phone, search),
         ilike(leads.metaLeadId, search),
+        ilike(leads.campaignName, search),
       )
       if (searchFilter) filters.push(searchFilter)
     }
 
     const where = filters.length > 0 ? and(...filters) : undefined
     const offset = (options.page - 1) * options.limit
+    const sortColumns = {
+      createdAt: leads.createdAt,
+      fullName: leads.fullName,
+      campaignName: leads.campaignName,
+      status: leads.status,
+    }
+    const sortColumn = sortColumns[options.sortBy]
+    const sort =
+      options.sortDirection === 'asc' ? asc(sortColumn) : desc(sortColumn)
     const [rows, totalRows] = await Promise.all([
       this.db
         .select()
         .from(leads)
         .where(where)
-        .orderBy(desc(leads.createdAt))
+        .orderBy(sql`${sort} nulls last`, desc(leads.createdAt), desc(leads.id))
         .limit(options.limit)
         .offset(offset),
       this.db.select({ value: count() }).from(leads).where(where),
@@ -234,6 +264,16 @@ export class LeadService {
         totalPages: total === 0 ? 0 : Math.ceil(total / options.limit),
       },
     }
+  }
+
+  async listCampaigns(): Promise<string[]> {
+    const rows = await this.db
+      .selectDistinct({ name: leads.campaignName })
+      .from(leads)
+      .where(isNotNull(leads.campaignName))
+      .orderBy(asc(leads.campaignName))
+
+    return rows.flatMap(({ name }) => (name ? [name] : []))
   }
 
   async getLead(id: string): Promise<{

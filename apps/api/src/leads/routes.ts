@@ -1,12 +1,9 @@
-import { createHmac, timingSafeEqual } from 'node:crypto'
-
 import { TypeBoxTypeProvider } from '@fastify/type-provider-typebox'
 import { Type } from '@sinclair/typebox'
-import type { FastifyInstance, FastifyRequest } from 'fastify'
+import type { FastifyInstance } from 'fastify'
 
 import type { AppConfig } from '../config.js'
 import type { Database } from '../db/client.js'
-import { UnauthorizedError } from '../errors.js'
 import { extractMetaLeads } from './meta-payload.js'
 import {
   ActivitySchema,
@@ -16,37 +13,11 @@ import {
   MetaWebhookBodySchema,
 } from './schemas.js'
 import { LeadService } from './service.js'
+import { verifyWebhookSignature } from './webhook-signature.js'
 
 const IdParamsSchema = Type.Object({
   id: Type.String({ format: 'uuid' }),
 })
-
-function verifyMetaSignature(
-  request: FastifyRequest,
-  appSecret?: string,
-): void {
-  if (!appSecret) return
-
-  const received = request.headers['x-hub-signature-256']
-  if (typeof received !== 'string' || !request.rawBody) {
-    throw new UnauthorizedError(
-      'A valid X-Hub-Signature-256 header is required',
-    )
-  }
-
-  const expected = `sha256=${createHmac('sha256', appSecret)
-    .update(request.rawBody)
-    .digest('hex')}`
-  const receivedBuffer = Buffer.from(received)
-  const expectedBuffer = Buffer.from(expected)
-
-  if (
-    receivedBuffer.length !== expectedBuffer.length ||
-    !timingSafeEqual(receivedBuffer, expectedBuffer)
-  ) {
-    throw new UnauthorizedError('The Meta webhook signature is invalid')
-  }
-}
 
 export function registerLeadRoutes(
   app: FastifyInstance,
@@ -55,50 +26,6 @@ export function registerLeadRoutes(
 ): void {
   const server = app.withTypeProvider<TypeBoxTypeProvider>()
   const service = new LeadService(database)
-
-  server.get(
-    '/webhook/meta-lead',
-    {
-      schema: {
-        querystring: Type.Object({
-          'hub.challenge': Type.String(),
-          'hub.mode': Type.String(),
-          'hub.verify_token': Type.String(),
-        }),
-        response: {
-          200: Type.String(),
-          403: ErrorSchema,
-          503: ErrorSchema,
-        },
-      },
-    },
-    async (request, reply) => {
-      const query = request.query
-
-      if (!config.metaVerifyToken) {
-        return reply.status(503).send({
-          error: {
-            code: 'WEBHOOK_NOT_CONFIGURED',
-            message: 'META_VERIFY_TOKEN is not configured',
-          },
-        })
-      }
-
-      if (
-        query['hub.mode'] !== 'subscribe' ||
-        query['hub.verify_token'] !== config.metaVerifyToken
-      ) {
-        return reply.status(403).send({
-          error: {
-            code: 'INVALID_VERIFY_TOKEN',
-            message: 'The Meta webhook verification token is invalid',
-          },
-        })
-      }
-
-      return reply.type('text/plain').send(query['hub.challenge'])
-    },
-  )
 
   server.post(
     '/webhook/meta-lead',
@@ -125,7 +52,11 @@ export function registerLeadRoutes(
       },
     },
     async (request) => {
-      verifyMetaSignature(request, config.metaAppSecret)
+      verifyWebhookSignature(
+        request.rawBody,
+        request.headers['x-webhook-signature-256'],
+        config.webhookSigningSecret,
+      )
       const incoming = extractMetaLeads(request.body)
       const data = await service.ingestMetaLeads(incoming)
 
@@ -142,8 +73,27 @@ export function registerLeadRoutes(
             Type.Integer({ default: 20, maximum: 100, minimum: 1 }),
           ),
           page: Type.Optional(Type.Integer({ default: 1, minimum: 1 })),
+          campaign: Type.Optional(
+            Type.Union([
+              Type.String({ minLength: 1 }),
+              Type.Array(Type.String({ minLength: 1 })),
+            ]),
+          ),
           search: Type.Optional(Type.String({ minLength: 1 })),
-          status: Type.Optional(LeadStatusSchema),
+          sortBy: Type.Optional(
+            Type.Union([
+              Type.Literal('createdAt'),
+              Type.Literal('fullName'),
+              Type.Literal('campaignName'),
+              Type.Literal('status'),
+            ]),
+          ),
+          sortDirection: Type.Optional(
+            Type.Union([Type.Literal('asc'), Type.Literal('desc')]),
+          ),
+          status: Type.Optional(
+            Type.Union([LeadStatusSchema, Type.Array(LeadStatusSchema)]),
+          ),
         }),
         response: {
           200: Type.Object({
@@ -163,10 +113,31 @@ export function registerLeadRoutes(
       return service.listLeads({
         limit: request.query.limit ?? 20,
         page: request.query.page ?? 1,
+        campaign: request.query.campaign
+          ? Array.isArray(request.query.campaign)
+            ? request.query.campaign
+            : [request.query.campaign]
+          : undefined,
         search: request.query.search,
-        status: request.query.status,
+        sortBy: request.query.sortBy ?? 'createdAt',
+        sortDirection: request.query.sortDirection ?? 'desc',
+        status: request.query.status
+          ? Array.isArray(request.query.status)
+            ? request.query.status
+            : [request.query.status]
+          : undefined,
       })
     },
+  )
+
+  server.get(
+    '/leads/campaigns',
+    {
+      schema: {
+        response: { 200: Type.Array(Type.String()) },
+      },
+    },
+    async () => service.listCampaigns(),
   )
 
   server.get(
