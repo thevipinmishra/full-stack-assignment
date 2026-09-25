@@ -4,6 +4,23 @@ A full-stack lead intake service with a signed webhook emulator, lead audit hist
 
 Live demo: https://web-production-06898.up.railway.app/ (API health: https://web-production-06898.up.railway.app/api/health)
 
+Source: https://github.com/thevipinmishra/full-stack-assignment
+
+## Assignment checklist
+
+| Requirement | Where to see it |
+| --- | --- |
+| Lead list, detail, activity timeline | Open the live demo, send a sample webhook, then open its lead |
+| Meta webhook and lead API | `POST /webhook/meta-lead`, `GET /leads`, `GET /leads/:id`, `PATCH /leads/:id/status` |
+| Lead Created, Lead Updated, Status Changed | `lead_activities` records and the detail page's audit trail |
+| React, TypeScript, backend, PostgreSQL, Docker | `apps/web`, `apps/api`, and `compose.yaml` |
+| Source, deployment, setup, architecture, trade-offs, scaling, future work | This repository, the live URL above, and the sections below |
+| AI usage and architecture decision record | [AGENT.md](AGENT.md) |
+| Meaningful commit trail | [Repository history](https://github.com/thevipinmishra/full-stack-assignment/commits) |
+| Testing | Unit and UI flow tests, PostgreSQL integration tests, and CI container smoke test |
+
+The demo accepts signed Meta-shaped requests. It does not fetch real contact answers from Meta's Graph API. Use synthetic lead data only; the public demo has no login.
+
 ## Stack
 
 - React 19 and TypeScript
@@ -98,6 +115,7 @@ An enriched delivery with the same `leadgen_id` updates only the supplied fields
 ```
 
 Webhook retries are idempotent. The first delivery creates a `lead_created` activity. A later delivery that changes stored fields creates `lead_updated`. An identical retry creates no duplicate activity. Status changes create `status_changed` in the same transaction as the lead update.
+An unchanged status request also creates no activity. The audit trail records committed state changes, not reads or no-op requests.
 
 Set `WEBHOOK_SIGNING_SECRET` to verify `X-Hub-Signature-256`, an HMAC-SHA256 digest of the raw JSON body. The API requires this secret when `NODE_ENV=production`. Docker Compose uses `local-demo-secret` for local use. Use the actual Meta app secret for a Meta subscription; the simulator must use the same value as the API. Set `META_VERIFY_TOKEN` to enable the `GET /webhook/meta-lead` subscription challenge. The configured token must match the token entered in Meta's app settings. Without it, the challenge returns 403.
 
@@ -130,6 +148,10 @@ pnpm lint
 pnpm build
 ```
 
+The regular test command runs without a database and skips the PostgreSQL integration tests. To run those tests locally, create a separate database whose name ends in `_test`, then set `TEST_DATABASE_URL` to its connection string before `pnpm test`. The tests apply migrations and clear only that dedicated database between cases. Do not point `TEST_DATABASE_URL` at the demo or production database.
+
+GitHub Actions runs the PostgreSQL integration tests, all four checks above, and a Docker Compose smoke test that sends a synthetic lead through the API and checks the web proxy. The smoke test uses the same script documented above. Docker is needed to run the container check locally.
+
 ## Docker
 
 Start PostgreSQL, the API, and the web app with:
@@ -142,7 +164,7 @@ The API container applies pending migrations before it starts. PostgreSQL data i
 
 ## Architecture and decisions
 
-The simulator sends signed requests to Fastify. PostgreSQL stores the current lead in `leads` and each state-changing action in `lead_activities`. Ingestion uses a unique Meta lead ID and a transaction so a retry cannot create a duplicate lead. The activity row and lead change commit together. A repeated payload that changes no stored field creates no new activity.
+The browser calls the Fastify API through the Nginx `/api/*` proxy. The simulator sends signed requests to Fastify. PostgreSQL stores the current lead in `leads` and each state-changing action in `lead_activities`. Ingestion uses a unique Meta lead ID and a transaction so a retry cannot create a duplicate lead. The activity row and lead change commit together. A repeated payload that changes no stored field creates no new activity.
 
 TanStack Table manages the table state and rendering. Fastify applies search, campaign and status filters, allowlisted sorting, and pagination to PostgreSQL. Database indexes cover the unique lead ID, creation order, and status plus creation order. Search uses `ILIKE`; a trigram index would help at larger scale.
 
