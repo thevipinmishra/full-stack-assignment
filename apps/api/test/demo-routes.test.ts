@@ -18,7 +18,7 @@ describe('webhook demo', () => {
     app.post('/webhook/meta-lead', async (request) => {
       verifyWebhookSignature(
         Buffer.from(JSON.stringify(request.body)),
-        request.headers['x-webhook-signature-256'],
+        request.headers['x-hub-signature-256'],
         'test-secret',
       )
 

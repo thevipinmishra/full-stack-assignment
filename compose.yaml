@@ -26,6 +26,7 @@ services:
     environment:
       DATABASE_URL: postgres://postgres:postgres@database:5432/lead_intake
       PORT: 3001
+      META_VERIFY_TOKEN: ${META_VERIFY_TOKEN:-local-demo-verify-token}
       WEBHOOK_SIGNING_SECRET: ${WEBHOOK_SIGNING_SECRET:-local-demo-secret}
     ports:
       - "127.0.0.1:3001:3001"

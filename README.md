@@ -49,6 +49,7 @@ Use `apps/api/.env.example` as the environment variable reference. Export the va
 | Method  | Path                 | Purpose                                    |
 | ------- | -------------------- | ------------------------------------------ |
 | `GET`   | `/health`            | Check the API and database connection      |
+| `GET`   | `/webhook/meta-lead` | Answer a configured Meta subscription challenge |
 | `POST`  | `/webhook/meta-lead` | Store or update simulated Meta leads       |
 | `POST`  | `/demo/webhook`      | Send one signed synthetic webhook          |
 | `GET`   | `/leads`             | List and filter leads                      |
@@ -56,7 +57,7 @@ Use `apps/api/.env.example` as the environment variable reference. Export the va
 | `GET`   | `/leads/:id`         | Return one lead with its activity timeline |
 | `PATCH` | `/leads/:id/status`  | Change a lead's status                     |
 
-`GET /leads` accepts `page`, `limit`, `status`, `search`, `campaign`, `sortBy`, and `sortDirection`. Repeat `campaign` or `status` to select more than one value. Campaigns match exact names; statuses and campaigns each match any selected value. Sort fields are `createdAt`, `fullName`, `campaignName`, and `status`; direction is `asc` or `desc`. Valid statuses are `new`, `contacted`, `qualified`, `disqualified`, and `converted`.
+`GET /leads` accepts `page`, `limit`, `status`, `search`, `campaign`, `sortBy`, and `sortDirection`. Repeat `campaign` or `status` to select more than one value. Campaigns match exact names; statuses and campaigns each match any selected value. Search treats `%` and `_` as literal characters. Sort fields are `createdAt`, `fullName`, `campaignName`, and `status`; direction is `asc` or `desc`. Valid statuses are `new`, `contacted`, `qualified`, `disqualified`, and `converted`.
 
 The sample button sends one Meta-shaped page event with synthetic contact and campaign details. The command-line simulator below sends a notification and then enriches it for the same `leadgen_id`. Both are webhook simulations, not a live Meta integration.
 
@@ -98,7 +99,7 @@ An enriched delivery with the same `leadgen_id` updates only the supplied fields
 
 Webhook retries are idempotent. The first delivery creates a `lead_created` activity. A later delivery that changes stored fields creates `lead_updated`. An identical retry creates no duplicate activity. Status changes create `status_changed` in the same transaction as the lead update.
 
-Set `WEBHOOK_SIGNING_SECRET` to verify `X-Webhook-Signature-256`, an HMAC-SHA256 digest of the raw JSON body. The API requires this secret when `NODE_ENV=production`. Docker Compose uses `local-demo-secret` for local use. Give every public deployment a strong secret and use the same value when running the simulator.
+Set `WEBHOOK_SIGNING_SECRET` to verify `X-Hub-Signature-256`, an HMAC-SHA256 digest of the raw JSON body. The API requires this secret when `NODE_ENV=production`. Docker Compose uses `local-demo-secret` for local use. Use the actual Meta app secret for a Meta subscription; the simulator must use the same value as the API. Set `META_VERIFY_TOKEN` to enable the `GET /webhook/meta-lead` subscription challenge. The configured token must match the token entered in Meta's app settings. Without it, the challenge returns 403.
 
 ## Synthetic end-to-end demo
 
@@ -141,13 +142,13 @@ The API container applies pending migrations before it starts. PostgreSQL data i
 
 ## Architecture and decisions
 
-The simulator sends signed requests to Fastify. PostgreSQL stores the current lead in `leads` and each state-changing action in `lead_activities`. Ingestion uses a unique lead ID and a transaction so a retry cannot create a duplicate lead. The activity row and lead change commit together. A repeated payload that changes no stored field creates no new activity.
+The simulator sends signed requests to Fastify. PostgreSQL stores the current lead in `leads` and each state-changing action in `lead_activities`. Ingestion uses a unique Meta lead ID and a transaction so a retry cannot create a duplicate lead. The activity row and lead change commit together. A repeated payload that changes no stored field creates no new activity.
 
 TanStack Table manages the table state and rendering. Fastify applies search, campaign and status filters, allowlisted sorting, and pagination to PostgreSQL. Database indexes cover the unique lead ID, creation order, and status plus creation order. Search uses `ILIKE`; a trigram index would help at larger scale.
 
 ## Trade-offs
 
-The command-line simulator's initial notification stores only IDs and timestamps. Its second request supplies contact answers through `field_data`. A real Meta integration would need a subscription handshake, Meta signature handling, and a Graph API fetch for contact answers.
+The command-line simulator's initial notification stores only IDs and timestamps. Its second request supplies contact answers through `field_data`. The API supports Meta's subscription challenge and signature header, but a real integration still needs a Graph API fetch for contact answers, access token management, and retries for failed enrichment.
 
 The public demo also has no login for lead reads or status changes. Use synthetic data only until authentication, authorization, and retention rules are in place.
 
@@ -155,7 +156,7 @@ The public demo also has no login for lead reads or status changes. Use syntheti
 
 Railway runs each container as a separate service; it does not execute `compose.yaml` as a single production stack. Create one Railway project with a PostgreSQL service, an `api` service, and a `web` service. Connect both application services to this repository with the repository root as their build context.
 
-1. Set the API service's Dockerfile path (`RAILWAY_DOCKERFILE_PATH`) to `apps/api/Dockerfile`. Set `DATABASE_URL` to `${{Postgres.DATABASE_URL}}`, `PORT` to `3001`, and a strong `WEBHOOK_SIGNING_SECRET`. Set its pre-deploy command to `node dist/db/migrate.js` and health check path to `/health`. The API only needs its automatic private domain when the web proxy receives all external requests.
+1. Set the API service's Dockerfile path (`RAILWAY_DOCKERFILE_PATH`) to `apps/api/Dockerfile`. Set `DATABASE_URL` to `${{Postgres.DATABASE_URL}}`, `PORT` to `3001`, and a strong `WEBHOOK_SIGNING_SECRET`. Set `META_VERIFY_TOKEN` as well if connecting a Meta app. Set its pre-deploy command to `node dist/db/migrate.js` and health check path to `/health`. The API only needs its automatic private domain when the web proxy receives all external requests.
 2. Set the web service's Dockerfile path (`RAILWAY_DOCKERFILE_PATH`) to `apps/web/Dockerfile`. Set `PORT=8080`, `API_HOST=api.railway.internal`, and `API_PORT=3001`. Give this service a public domain. Browser requests and synthetic webhook requests use this domain; `/api/*` goes to the private API service.
 3. Run the simulator against `https://YOUR-WEB-DOMAIN/api`, with `WEBHOOK_SIGNING_SECRET` in the script's environment. Confirm the lead list, detail page, status change, timeline, and `/api/health` on the public domain. Put the verified public web URL in the submission.
 

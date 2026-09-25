@@ -1,13 +1,20 @@
 export interface AppConfig {
   databaseUrl: string
+  metaVerifyToken?: string
   webhookSigningSecret?: string
   port: number
 }
 
 function readPort(value: string | undefined): number {
-  const port = Number.parseInt(value ?? '3001', 10)
+  const rawPort = value ?? '3001'
+  const port = Number(rawPort)
 
-  if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+  if (
+    !/^\d+$/.test(rawPort) ||
+    !Number.isInteger(port) ||
+    port < 1 ||
+    port > 65_535
+  ) {
     throw new Error('PORT must be an integer between 1 and 65535')
   }
 
@@ -26,6 +33,7 @@ export function loadConfig(
     databaseUrl:
       environment.DATABASE_URL ??
       'postgres://postgres:postgres@localhost:5432/lead_intake',
+    metaVerifyToken: environment.META_VERIFY_TOKEN?.trim() || undefined,
     webhookSigningSecret,
     port: readPort(environment.PORT),
   }

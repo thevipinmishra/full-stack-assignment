@@ -52,7 +52,7 @@ async function postWebhook(payload) {
   const body = JSON.stringify(payload)
   const headers = { 'content-type': 'application/json' }
 
-  headers['x-webhook-signature-256'] =
+  headers['x-hub-signature-256'] =
     `sha256=${createHmac('sha256', secret).update(body).digest('hex')}`
 
   return request('/webhook/meta-lead', {

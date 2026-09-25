@@ -104,7 +104,7 @@ export function registerDemoRoutes(
           url: '/webhook/meta-lead',
           headers: {
             'content-type': 'application/json',
-            'x-webhook-signature-256': `sha256=${signature}`,
+            'x-hub-signature-256': `sha256=${signature}`,
           },
           payload: body,
         })

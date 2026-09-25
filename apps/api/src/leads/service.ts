@@ -23,6 +23,7 @@ import {
 } from '../db/schema.js'
 import { NotFoundError } from '../errors.js'
 import type { IncomingMetaLead } from './meta-payload.js'
+import { containsPattern } from './search-pattern.js'
 
 const mutableLeadFields = [
   'fullName',
@@ -129,6 +130,7 @@ export class LeadService {
       const results: IngestedLead[] = []
 
       for (const incoming of incomingLeads) {
+        // The unique key serializes concurrent deliveries for one Meta lead.
         const [created] = await transaction
           .insert(leads)
           .values({
@@ -221,7 +223,7 @@ export class LeadService {
       filters.push(inArray(leads.campaignName, options.campaign))
     }
     if (options.search) {
-      const search = `%${options.search}%`
+      const search = containsPattern(options.search)
       const searchFilter = or(
         ilike(leads.fullName, search),
         ilike(leads.email, search),

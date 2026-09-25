@@ -16,6 +16,7 @@ describe('webhook security', () => {
         config: {
           databaseUrl:
             'postgres://postgres:postgres@localhost:5432/lead_intake',
+          metaVerifyToken: 'test-verify-token',
           webhookSigningSecret: 'test-secret',
           port: 3001,
         },
@@ -37,12 +38,46 @@ describe('webhook security', () => {
     expect(response.statusCode).toBe(401)
   })
 
-  it('has no Meta subscription handshake', async () => {
+  it('accepts the Meta signature header over the raw request body', async () => {
+    const ingest = vi
+      .spyOn(LeadService.prototype, 'ingestMetaLeads')
+      .mockResolvedValue([])
+    const body = '{"leadgen_id":"lead-1"}'
+    const signature = `sha256=${createHmac('sha256', 'test-secret').update(body).digest('hex')}`
+    const response = await app.inject({
+      method: 'POST',
+      url: '/webhook/meta-lead',
+      headers: {
+        'content-type': 'application/json',
+        'x-hub-signature-256': signature,
+      },
+      payload: body,
+    })
+
+    expect(response.statusCode).toBe(200)
+    expect(response.json()).toEqual({ data: [], received: 0 })
+    expect(ingest).toHaveBeenCalledWith([
+      expect.objectContaining({ metaLeadId: 'lead-1' }),
+    ])
+  })
+
+  it('answers a valid Meta subscription challenge as plain text', async () => {
     const response = await app.inject({
       method: 'GET',
-      url: '/webhook/meta-lead',
+      url: '/webhook/meta-lead?hub.mode=subscribe&hub.verify_token=test-verify-token&hub.challenge=challenge-123',
     })
-    expect(response.statusCode).toBe(404)
+    expect(response.statusCode).toBe(200)
+    expect(response.headers['content-type']).toContain('text/plain')
+    expect(response.body).toBe('challenge-123')
+  })
+
+  it('rejects a subscription challenge with the wrong token', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/webhook/meta-lead?hub.mode=subscribe&hub.verify_token=wrong&hub.challenge=challenge-123',
+    })
+    expect(response.statusCode).toBe(403)
+    expect(response.json().error.code).toBe('INVALID_VERIFICATION_TOKEN')
   })
 
   it('rejects unknown sort fields before querying the database', async () => {
@@ -106,5 +141,9 @@ describe('webhook security', () => {
     expect(() => loadConfig({ NODE_ENV: 'production' })).toThrow(
       'WEBHOOK_SIGNING_SECRET',
     )
+  })
+
+  it('rejects a port with trailing characters', () => {
+    expect(() => loadConfig({ PORT: '3001abc' })).toThrow('PORT')
   })
 })

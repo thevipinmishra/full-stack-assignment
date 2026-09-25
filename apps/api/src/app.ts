@@ -30,6 +30,7 @@ export function buildApp(
   const ownsDatabase = dependencies.database === undefined
 
   app.removeContentTypeParser('application/json')
+  // Signature verification needs the exact bytes Meta sent, before JSON parsing.
   app.addContentTypeParser(
     'application/json',
     { parseAs: 'buffer' },

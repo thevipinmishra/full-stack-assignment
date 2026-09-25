@@ -76,6 +76,11 @@ const columns: Array<ColumnDef<typeof features, Lead>> = [
           to="/leads/$leadId"
           params={{ leadId: row.original.id }}
           title={getLeadName(row.original.fullName)}
+          aria-label={
+            row.original.fullName?.trim()
+              ? undefined
+              : `Unnamed lead, Meta ID ${row.original.metaLeadId}`
+          }
           className="group/lead inline-flex max-w-full items-center gap-1.5 rounded-sm font-bold text-[#213231] hover:text-[#176c5b] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#176c5b]"
         >
           <span className="truncate">{getLeadName(row.original.fullName)}</span>
@@ -298,9 +303,9 @@ export function LeadListPage() {
           {pagination && (
             <span
               className="rounded-full bg-[#e7f0e9] px-2.5 py-1 text-xs font-bold text-[#3a6854] tabular-nums"
-              role="status"
             >
               {pagination.total}
+              <span className="sr-only"> leads</span>
             </span>
           )}
         </div>
@@ -434,7 +439,11 @@ export function LeadListPage() {
           Leads
         </h2>
         <span className="sr-only" role="status">
-          {leadsQuery.isPending ? 'Loading leads' : ''}
+          {leadsQuery.isPending
+            ? 'Loading leads'
+            : pagination
+              ? `${pagination.total} leads found. Page ${filters.page} of ${Math.max(1, pagination.totalPages)}.`
+              : ''}
         </span>
         <p className="px-4 pb-2 text-xs text-[#687774] sm:hidden">
           Scroll sideways to see all columns.

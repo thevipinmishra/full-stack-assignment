@@ -4,6 +4,7 @@ import type { FastifyInstance } from 'fastify'
 
 import type { AppConfig } from '../config.js'
 import type { Database } from '../db/client.js'
+import { HttpError } from '../errors.js'
 import { extractMetaLeads } from './meta-payload.js'
 import {
   ActivitySchema,
@@ -26,6 +27,34 @@ export function registerLeadRoutes(
 ): void {
   const server = app.withTypeProvider<TypeBoxTypeProvider>()
   const service = new LeadService(database)
+
+  server.get(
+    '/webhook/meta-lead',
+    {
+      schema: {
+        querystring: Type.Object({
+          'hub.mode': Type.String(),
+          'hub.verify_token': Type.String(),
+          'hub.challenge': Type.String(),
+        }),
+      },
+    },
+    async (request, reply) => {
+      if (
+        !config.metaVerifyToken ||
+        request.query['hub.mode'] !== 'subscribe' ||
+        request.query['hub.verify_token'] !== config.metaVerifyToken
+      ) {
+        throw new HttpError(
+          403,
+          'INVALID_VERIFICATION_TOKEN',
+          'Webhook verification failed',
+        )
+      }
+
+      return reply.type('text/plain').send(request.query['hub.challenge'])
+    },
+  )
 
   server.post(
     '/webhook/meta-lead',
@@ -54,7 +83,7 @@ export function registerLeadRoutes(
     async (request) => {
       verifyWebhookSignature(
         request.rawBody,
-        request.headers['x-webhook-signature-256'],
+        request.headers['x-hub-signature-256'],
         config.webhookSigningSecret,
       )
       const incoming = extractMetaLeads(request.body)
